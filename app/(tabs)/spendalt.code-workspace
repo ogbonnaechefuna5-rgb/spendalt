@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"name": "spendalt",
+			"path": "../.."
+		},
+		{
+			"name": "backend",
+			"path": "../../../backend"
+		}
+	],
+	"settings": {
+	}
+}
