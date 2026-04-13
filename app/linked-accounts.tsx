@@ -1,14 +1,12 @@
-import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { useTheme } from '@/context/theme-context';
-import { BANK_ACCOUNTS, BankAccount } from '@/constants/banks';
+import { getLinkedAccounts, removeLinkedAccount, syncLinkedAccount, LinkedAccount } from '@/services/user-api';
 
-const TOTAL_NGN = '₦1,820,450.00';
-
-function StatusBadge({ status }: { status: BankAccount['status'] }) {
+function StatusBadge({ status }: { status: string }) {
   const { theme } = useTheme();
   const config = {
     active:  { label: 'CONNECTED', color: theme.green,  bg: `${theme.green}20` },
@@ -30,49 +28,37 @@ const badge = StyleSheet.create({
   text: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 });
 
-function AccountCard({ account, onRemove, onSync }: { account: BankAccount; onRemove: () => void; onSync: () => void }) {
+function AccountCard({ account, onRemove, onSync }: { account: LinkedAccount; onRemove: () => void; onSync: () => void }) {
   const { theme, textColor, subTextColor, borderColor } = useTheme();
+  const lastSync = new Date(account.last_sync).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   return (
     <View style={[card.wrap, { backgroundColor: theme.card, borderColor }]}>
-      {/* Top row */}
       <View style={card.top}>
-        <View style={[card.logoBox, { backgroundColor: `${account.color}18` }]}>
-          <Text style={card.emoji}>{account.emoji}</Text>
+        <View style={[card.logoBox, { backgroundColor: `${theme.green}18` }]}>
+          <Text style={card.emoji}>🏦</Text>
         </View>
         <View style={card.info}>
-          <Text style={[card.bankName, { color: textColor }]}>{account.bankName}</Text>
-          <Text style={[card.accountType, { color: subTextColor }]}>{account.accountType}</Text>
+          <Text style={[card.bankName, { color: textColor }]}>{account.bank_name}</Text>
+          <Text style={[card.accountType, { color: subTextColor }]}>{account.account_type}</Text>
         </View>
         <StatusBadge status={account.status} />
       </View>
-
-      {/* Divider */}
       <View style={[card.divider, { backgroundColor: borderColor }]} />
-
-      {/* Balance row */}
       <View style={card.balanceRow}>
         <View>
           <Text style={[card.balanceLabel, { color: subTextColor }]}>BALANCE</Text>
-          <Text style={[card.balance, { color: textColor }]}>{account.balance}</Text>
+          <Text style={[card.balance, { color: textColor }]}>₦{account.balance.toLocaleString()}</Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={[card.balanceLabel, { color: subTextColor }]}>ACCOUNT</Text>
-          <Text style={[card.accountNum, { color: subTextColor }]}>{account.accountNumber}</Text>
+          <Text style={[card.accountNum, { color: subTextColor }]}>{account.account_number}</Text>
         </View>
       </View>
-
-      {/* Sync info + actions */}
       <View style={card.footer}>
         <View style={card.syncRow}>
-          <IconSymbol
-            name={account.status === 'error' ? 'exclamationmark.circle.fill' : 'arrow.clockwise'}
-            size={12}
-            color={account.status === 'error' ? '#EF4444' : subTextColor}
-          />
-          <Text style={[card.syncText, { color: account.status === 'error' ? '#EF4444' : subTextColor }]}>
-            {account.lastSync}
-          </Text>
+          <IconSymbol name={account.status === 'error' ? 'exclamationmark.circle.fill' : 'arrow.clockwise'} size={12} color={account.status === 'error' ? '#EF4444' : subTextColor} />
+          <Text style={[card.syncText, { color: account.status === 'error' ? '#EF4444' : subTextColor }]}>{lastSync}</Text>
         </View>
         <View style={card.actions}>
           <TouchableOpacity style={[card.actionBtn, { borderColor }]} onPress={onSync}>
@@ -110,24 +96,40 @@ const card = StyleSheet.create({
   actionText: { fontSize: 12, fontWeight: '600' },
 });
 
+import { useUI } from '@/context/ui-context';
+
 export default function LinkedAccountsScreen() {
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor } = useTheme();
-  const [accounts, setAccounts] = useState(BANK_ACCOUNTS);
+  const { showDialog, showToast } = useUI();
+  const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
+
+  useEffect(() => { getLinkedAccounts().then(setAccounts).catch(() => {}); }, []);
 
   const handleRemove = (id: string) => {
-    Alert.alert('Remove Account', 'Disconnect this bank account from Spendalt?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => setAccounts(prev => prev.filter(a => a.id !== id)) },
-    ]);
+    showDialog({
+      title: 'Remove Account',
+      message: 'Disconnect this bank account from Spendalt?',
+      actions: [
+        { label: 'Cancel', variant: 'ghost', onPress: () => {} },
+        { label: 'Remove', variant: 'destructive', onPress: async () => {
+          await removeLinkedAccount(id);
+          setAccounts(prev => prev.filter(a => a.id !== id));
+          showToast({ message: 'Account removed.', type: 'info' });
+        }},
+      ],
+    });
   };
 
-  const handleSync = (id: string) => {
-    // placeholder — would trigger API sync
+  const handleSync = async (id: string) => {
+    await syncLinkedAccount(id);
+    showToast({ message: 'Account synced!', type: 'success' });
+    getLinkedAccounts().then(setAccounts).catch(() => {});
   };
 
+  const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
   const activeCount = accounts.filter(a => a.status === 'active').length;
-  const errorCount  = accounts.filter(a => a.status === 'error').length;
+  const errorCount = accounts.filter(a => a.status === 'error').length;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bgDeep }}>
@@ -147,7 +149,7 @@ export default function LinkedAccountsScreen() {
           <View style={s.summaryTop}>
             <View>
               <Text style={[s.summaryLabel, { color: theme.green }]}>TOTAL BALANCE</Text>
-              <Text style={[s.summaryAmount, { color: textColor }]}>{TOTAL_NGN}</Text>
+              <Text style={[s.summaryAmount, { color: textColor }]}>₦{totalBalance.toLocaleString()}</Text>
             </View>
             <View style={[s.summaryIcon, { backgroundColor: `${theme.green}20` }]}>
               <IconSymbol name="building.columns.fill" size={24} color={theme.green} />
@@ -201,7 +203,11 @@ export default function LinkedAccountsScreen() {
         </View>
 
         {/* Add account CTA */}
-        <PrimaryButton label="+ Link New Account" onPress={() => {}} style={s.cta} />
+        <PrimaryButton label="+ Link New Account" onPress={() => showDialog({
+          title: 'Link Bank Account',
+          message: 'Bank account linking via open banking (Mono/Okra) is coming in Phase 2. Stay tuned!',
+          actions: [{ label: 'OK', variant: 'primary', onPress: () => {} }],
+        })} style={s.cta} />
 
         <View style={{ height: 32 }} />
       </ScrollView>

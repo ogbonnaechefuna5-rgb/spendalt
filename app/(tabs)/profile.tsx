@@ -1,12 +1,36 @@
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SettingsRow } from '@/components/ui/settings-row';
 import { useTheme } from '@/context/theme-context';
+import { useAuth } from '@/context/auth-context';
+import { getProfile, logout, UserProfile } from '@/services/user-api';
+import { useUI } from '@/context/ui-context';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor, dividerColor, isDark, toggleTheme } = useTheme();
+  const { logout: authLogout } = useAuth();
+  const { showDialog } = useUI();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => { getProfile().then(setProfile).catch(() => {}); }, []);
+
+  const handleLogout = async () => {
+    showDialog({
+      title: 'Log Out',
+      message: 'Are you sure you want to log out of Spendalt?',
+      actions: [
+        { label: 'Cancel', variant: 'ghost', onPress: () => {} },
+        { label: 'Log Out', variant: 'destructive', onPress: async () => {
+          try { await logout(); } catch {}
+          await authLogout();
+          router.replace('/login');
+        }},
+      ],
+    });
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bgDeep }} contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
@@ -27,8 +51,8 @@ export default function ProfileScreen() {
             <IconSymbol name="pencil" size={14} color="#fff" />
           </TouchableOpacity>
         </View>
-        <Text style={[s.name, { color: textColor }]}>Alex Thompson</Text>
-        <Text style={[s.email, { color: theme.green }]}>alex.t@spendalt.io</Text>
+        <Text style={[s.name, { color: textColor }]}>{profile ? `${profile.first_name} ${profile.last_name}` : '—'}</Text>
+        <Text style={[s.email, { color: theme.green }]}>{profile?.email ?? '—'}</Text>
       </View>
 
       <Text style={[s.sectionLabel, { color: theme.green }]}>ACCOUNT SETTINGS</Text>
@@ -64,7 +88,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={[s.logoutBtn, { backgroundColor: theme.card, borderColor }]} onPress={() => router.replace('/login')}>
+      <TouchableOpacity style={[s.logoutBtn, { backgroundColor: theme.card, borderColor }]} onPress={handleLogout}>
         <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color="#FF6B4A" />
         <Text style={s.logoutText}>Logout</Text>
       </TouchableOpacity>

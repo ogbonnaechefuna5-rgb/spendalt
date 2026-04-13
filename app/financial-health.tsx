@@ -1,22 +1,23 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { useTheme } from '@/context/theme-context';
+import { getHealthScore, HealthScore } from '@/services/analytics-api';
+import { useUI } from '@/context/ui-context';
 
-const SCORE = 82;
-const SCORE_LABEL = 'EXCELLENT';
 const RING_SIZE = 200, RING_STROKE = 12;
 const RING_R = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRC = 2 * Math.PI * RING_R;
 const ARC_PCT = 0.78;
 
-function ScoreRing({ green, textColor, subTextColor }: { green: string; textColor: string; subTextColor: string }) {
-  const filled = (SCORE / 100) * RING_CIRC * ARC_PCT;
-  const total = RING_CIRC * ARC_PCT;
-  const gap = total - filled;
+function ScoreRing({ score, green, textColor }: { score: number; green: string; textColor: string }) {
+  const filled = (score / 100) * RING_CIRC * ARC_PCT;
+  const gap = RING_CIRC * ARC_PCT - filled;
   const offset = RING_CIRC * (1 - ARC_PCT) / 2;
+  const label = score >= 80 ? 'EXCELLENT' : score >= 65 ? 'GOOD' : score >= 50 ? 'FAIR' : 'POOR';
 
   return (
     <View style={ring.wrap}>
@@ -31,8 +32,8 @@ function ScoreRing({ green, textColor, subTextColor }: { green: string; textColo
           transform={`rotate(90 ${RING_SIZE/2} ${RING_SIZE/2})`} />
       </Svg>
       <View style={ring.center}>
-        <Text style={[ring.score, { color: textColor }]}>{SCORE}</Text>
-        <Text style={[ring.label, { color: green }]}>{SCORE_LABEL}</Text>
+        <Text style={[ring.score, { color: textColor }]}>{score}</Text>
+        <Text style={[ring.label, { color: green }]}>{label}</Text>
       </View>
     </View>
   );
@@ -45,15 +46,35 @@ const ring = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '700', letterSpacing: 1.5 },
 });
 
+const INSIGHT_ICONS: Record<string, string> = {
+  'Savings Ratio': '🐷',
+  'Spending Discipline': '💵',
+  'Budget Adherence': '✅',
+};
+
 export default function FinancialHealthScreen() {
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor } = useTheme();
+  const { showNotification } = useUI();
+  const [health, setHealth] = useState<HealthScore | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const INSIGHTS = [
-    { icon: '💵', label: 'Spending Discipline', desc: 'Impulse purchases down by 12% compared to last month.', value: 'Stable', valueColor: theme.green },
-    { icon: '🐷', label: 'Savings Ratio', desc: "Great! You're exceeding the recommended 20% savings goal.", value: '22%', valueColor: theme.green },
-    { icon: '✅', label: 'Budget Adherence', desc: 'You overspent in "Dining Out" but stayed under in "Grocery".', value: '92%', valueColor: '#F59E0B' },
-  ];
+  useEffect(() => {
+    getHealthScore()
+      .then(setHealth)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleImprovementPlan = () => {
+    if (!health) return;
+    showNotification({
+      title: 'Improvement Plan',
+      body: health.recommendations[0] ?? 'Keep up the great work!',
+      icon: 'lightbulb.fill',
+      iconColor: '#F59E0B',
+    });
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bgDeep }}>
@@ -63,54 +84,73 @@ export default function FinancialHealthScreen() {
             <IconSymbol name="arrow.left" size={18} color={textColor} />
           </TouchableOpacity>
           <Text style={[s.headerTitle, { color: textColor }]}>Financial Health</Text>
-          <TouchableOpacity style={s.headerBtn}>
-            <IconSymbol name="square.and.arrow.up" size={18} color={textColor} />
-          </TouchableOpacity>
+          <View style={s.headerBtn} />
         </View>
 
-        <View style={s.ringWrap}>
-          <ScoreRing green={theme.green} textColor={textColor} subTextColor={subTextColor} />
-          <Text style={[s.scoreCaption, { color: subTextColor }]}>
-            Your score increased by{' '}
-            <Text style={{ color: theme.green }}>+4 pts</Text>
-            {' '}this month
-          </Text>
-        </View>
-
-        <View style={[s.rankCard, { backgroundColor: theme.card, borderColor }]}>
-          <View style={s.rankTop}>
-            <Text style={[s.rankLabel, { color: textColor }]}>Percentile Rank</Text>
-            <Text style={[s.rankValue, { color: theme.green }]}>TOP 15%</Text>
-          </View>
-          <View style={[s.track, { backgroundColor: theme.bgMid }]}>
-            <View style={[s.trackFill, { backgroundColor: theme.green }]} />
-          </View>
-          <Text style={[s.rankDesc, { color: subTextColor }]}>
-            You're doing better than 85% of Spendalt users in your age bracket.
-          </Text>
-        </View>
-
-        <Text style={[s.sectionTitle, { color: textColor }]}>Key Insights</Text>
-        <View style={s.insightsList}>
-          {INSIGHTS.map(item => (
-            <View key={item.label} style={[s.insightRow, { backgroundColor: theme.card, borderColor }]}>
-              <View style={[s.insightIcon, { backgroundColor: theme.bgMid }]}>
-                <Text style={{ fontSize: 22 }}>{item.icon}</Text>
-              </View>
-              <View style={s.insightBody}>
-                <View style={s.insightTop}>
-                  <Text style={[s.insightLabel, { color: textColor }]}>{item.label}</Text>
-                  <Text style={[s.insightValue, { color: item.valueColor }]}>{item.value}</Text>
-                </View>
-                <Text style={[s.insightDesc, { color: subTextColor }]}>{item.desc}</Text>
-              </View>
+        {loading ? (
+          <ActivityIndicator color={theme.green} style={{ marginTop: 60 }} />
+        ) : health ? (
+          <>
+            <View style={s.ringWrap}>
+              <ScoreRing score={health.score} green={theme.green} textColor={textColor} />
+              <Text style={[s.scoreCaption, { color: subTextColor }]}>
+                Based on your spending and savings this month
+              </Text>
             </View>
-          ))}
-        </View>
 
-        <View style={{ height: 24 }} />
-        <PrimaryButton label="View Improvement Plan  ↗" onPress={() => {}} />
-        <View style={{ height: 40 }} />
+            <View style={[s.rankCard, { backgroundColor: theme.card, borderColor }]}>
+              <View style={s.rankTop}>
+                <Text style={[s.rankLabel, { color: textColor }]}>Percentile Rank</Text>
+                <Text style={[s.rankValue, { color: theme.green }]}>TOP {100 - health.percentile}%</Text>
+              </View>
+              <View style={[s.track, { backgroundColor: theme.bgMid }]}>
+                <View style={[s.trackFill, { backgroundColor: theme.green, width: `${health.percentile}%` as any }]} />
+              </View>
+              <Text style={[s.rankDesc, { color: subTextColor }]}>
+                Your financial health score is {health.grade.toLowerCase()} this month.
+              </Text>
+            </View>
+
+            <Text style={[s.sectionTitle, { color: textColor }]}>Key Insights</Text>
+            <View style={s.insightsList}>
+              {health.insights.map(item => {
+                const valueColor = item.score >= 65 ? theme.green : item.score >= 50 ? '#F59E0B' : '#EF4444';
+                return (
+                  <View key={item.category} style={[s.insightRow, { backgroundColor: theme.card, borderColor }]}>
+                    <View style={[s.insightIcon, { backgroundColor: theme.bgMid }]}>
+                      <Text style={{ fontSize: 22 }}>{INSIGHT_ICONS[item.category] ?? '📊'}</Text>
+                    </View>
+                    <View style={s.insightBody}>
+                      <View style={s.insightTop}>
+                        <Text style={[s.insightLabel, { color: textColor }]}>{item.category}</Text>
+                        <Text style={[s.insightValue, { color: valueColor }]}>{item.status}</Text>
+                      </View>
+                      <Text style={[s.insightDesc, { color: subTextColor }]}>{item.description}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+
+            {health.recommendations.length > 0 && (
+              <View style={[s.recsCard, { backgroundColor: theme.card, borderColor }]}>
+                <Text style={[s.recsTitle, { color: textColor }]}>Recommendations</Text>
+                {health.recommendations.map((r, i) => (
+                  <View key={i} style={s.recRow}>
+                    <IconSymbol name="checkmark.circle.fill" size={16} color={theme.green} />
+                    <Text style={[s.recText, { color: subTextColor }]}>{r}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View style={{ height: 24 }} />
+            <PrimaryButton label="View Improvement Plan  ↗" onPress={handleImprovementPlan} />
+            <View style={{ height: 40 }} />
+          </>
+        ) : (
+          <Text style={[s.empty, { color: subTextColor }]}>Could not load health score.</Text>
+        )}
       </ScrollView>
     </View>
   );
@@ -128,10 +168,10 @@ const s = StyleSheet.create({
   rankLabel: { fontWeight: '700', fontSize: 15 },
   rankValue: { fontWeight: '800', fontSize: 14 },
   track: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  trackFill: { width: '85%', height: '100%', borderRadius: 3 },
+  trackFill: { height: '100%', borderRadius: 3 },
   rankDesc: { fontSize: 12, lineHeight: 18 },
   sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16 },
-  insightsList: { gap: 4 },
+  insightsList: { gap: 4, marginBottom: 20 },
   insightRow: { flexDirection: 'row', gap: 14, borderRadius: 16, padding: 16, borderWidth: 1 },
   insightIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   insightBody: { flex: 1, gap: 4 },
@@ -139,4 +179,9 @@ const s = StyleSheet.create({
   insightLabel: { fontWeight: '700', fontSize: 15 },
   insightValue: { fontWeight: '700', fontSize: 14 },
   insightDesc: { fontSize: 12, lineHeight: 17 },
+  recsCard: { borderRadius: 16, padding: 16, borderWidth: 1, gap: 10, marginBottom: 8 },
+  recsTitle: { fontWeight: '700', fontSize: 15 },
+  recRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  recText: { flex: 1, fontSize: 13, lineHeight: 20 },
+  empty: { textAlign: 'center', marginTop: 60, fontSize: 14 },
 });

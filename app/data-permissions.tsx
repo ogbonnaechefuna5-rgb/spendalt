@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SettingsRow } from '@/components/ui/settings-row';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { useTheme } from '@/context/theme-context';
+import { getPreferences, savePreferences } from '@/services/user-api';
 
 export default function DataPermissionsScreen() {
   const router = useRouter();
@@ -12,6 +13,22 @@ export default function DataPermissionsScreen() {
   const [sms, setSms] = useState(true);
   const [analytics, setAnalytics] = useState(true);
   const [offers, setOffers] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getPreferences().then(p => {
+      setSms(p.sms_detection);
+      setAnalytics(p.analytics);
+      setOffers(p.partner_offers);
+    }).catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try { await savePreferences({ sms_detection: sms, analytics, partner_offers: offers }); }
+    catch {} finally { setLoading(false); }
+    router.back();
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bgDeep }} contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
@@ -88,9 +105,9 @@ export default function DataPermissionsScreen() {
         <Text style={[s.legalLink, { color: theme.green }]}>Terms of Service</Text>.
       </Text>
 
-      <PrimaryButton label="Save Preferences" onPress={() => router.back()} style={s.cta} />
+      <PrimaryButton label={loading ? 'Saving…' : 'Save Preferences'} onPress={handleSave} style={s.cta} />
 
-      <TouchableOpacity style={s.revokeBtn}>
+      <TouchableOpacity style={s.revokeBtn} onPress={() => savePreferences({ sms_detection: false, analytics: false, partner_offers: false }).then(() => router.back())}>
         <Text style={[s.revokeText, { color: theme.green }]}>Revoke All Access</Text>
       </TouchableOpacity>
     </ScrollView>

@@ -1,23 +1,29 @@
 import { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { useTheme } from '@/context/theme-context';
+import { ingestManual } from '@/services/transactions-api';
 
 const KEYS = ['1','2','3','4','5','6','7','8','9','.','0','⌫'];
 const CATEGORIES = ['Shopping','Food','Transport','Bills','Income','Other'];
 
+import { useUI } from '@/context/ui-context';
+
 export default function AddExpenseScreen() {
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor, isDark } = useTheme();
+  const { showToast } = useUI();
   const [amount, setAmount] = useState('0');
   const [category, setCategory] = useState('Shopping');
   const [catOpen, setCatOpen] = useState(false);
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date());
   const [dateOpen, setDateOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleKey = (key: string) => {
     setAmount(prev => {
@@ -34,6 +40,28 @@ export default function AddExpenseScreen() {
     return isToday ? `Today, ${label}` : label;
   };
 
+  const handleSubmit = async () => {
+    const parsed = parseFloat(amount);
+    if (!parsed || parsed <= 0) { setError('Enter a valid amount.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      await ingestManual({
+        amount: parsed,
+        type: category === 'Income' ? 'credit' : 'debit',
+        merchant: description || category,
+        category,
+        description,
+      });
+      showToast({ message: 'Transaction saved!', type: 'success' });
+      router.back();
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to save transaction.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bgDeep }}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -48,7 +76,7 @@ export default function AddExpenseScreen() {
         <View style={s.amountSection}>
           <Text style={[s.amountLabel, { color: theme.green }]}>How much?</Text>
           <View style={s.amountRow}>
-            <Text style={[s.currency, { color: theme.green }]}>$</Text>
+            <Text style={[s.currency, { color: theme.green }]}>₦</Text>
             <Text style={[s.amount, { color: textColor }]}>{amount}</Text>
           </View>
         </View>
@@ -114,7 +142,8 @@ export default function AddExpenseScreen() {
           ))}
         </View>
 
-        <PrimaryButton label="Add Transaction" onPress={() => router.back()} />
+        {error ? <Text style={s.error}>{error}</Text> : null}
+        <PrimaryButton label={loading ? 'Saving…' : 'Add Transaction'} onPress={handleSubmit} disabled={loading} />
       </ScrollView>
 
       <Modal visible={dateOpen} transparent animationType="slide">
@@ -174,4 +203,5 @@ const s = StyleSheet.create({
   pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1 },
   pickerTitle: { fontWeight: '700', fontSize: 16 },
   pickerDone: { fontWeight: '700', fontSize: 16 },
+  error: { color: '#ff6b6b', fontSize: 13, textAlign: 'center', marginBottom: 8 },
 });

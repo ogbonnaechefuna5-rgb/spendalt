@@ -1,18 +1,62 @@
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { InputField } from '@/components/ui/input-field';
+import { Logo } from '@/components/ui/logo';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { ScreenFooter } from '@/components/ui/screen-footer';
+import { SocialButton } from '@/components/ui/social-button';
+import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/context/theme-context';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Logo } from '@/components/ui/logo';
-import { InputField } from '@/components/ui/input-field';
-import { PrimaryButton } from '@/components/ui/primary-button';
-import { SocialButton } from '@/components/ui/social-button';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { ScreenFooter } from '@/components/ui/screen-footer';
-import { useTheme } from '@/context/theme-context';
 
 export default function LoginScreen() {
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor } = useTheme();
+  const { login, hasBiometrics, biometricEnabled, passcodeEnabled, biometricTypes, authenticateBiometric } = useAuth();
+
+  const isFaceID = biometricTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+  const biometricIcon = isFaceID ? 'faceid' : 'touchid';
+  const biometricLabel = isFaceID ? 'Face ID' : 'Fingerprint';
+
+  const handleLogin = async () => {
+    if (!identifier || !password) { setError('Phone/email and password are required.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      await login(identifier, password);
+      router.replace('/(tabs)');
+    } catch (e: any) {
+      setError(e.message ?? 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBiometric = async () => {
+    setError('');
+    const success = await authenticateBiometric();
+    if (success) {
+      router.replace('/(tabs)');
+    } else {
+      setError(`${biometricLabel} failed. Try again.`);
+    }
+  };
+
+  const handlePasscode = () => {
+    router.push('/local-auth?pin=1');
+  };
+
+  const showBiometric = hasBiometrics && biometricEnabled;
+  const showPasscode = passcodeEnabled;
+  const showQuickAccess = showBiometric || showPasscode;
 
   return (
     <ScrollView contentContainerStyle={[s.container, { backgroundColor: theme.bgDeep }]} keyboardShouldPersistTaps="handled">
@@ -27,11 +71,22 @@ export default function LoginScreen() {
       <Text style={[s.subtitle, { color: subTextColor }]}>Enter your phone number to continue to your premium account.</Text>
 
       <View style={s.form}>
-        <InputField label="Phone Number" placeholder="+1 (555) 000-0000" keyboardType="phone-pad" leftIcon={<IconSymbol name="phone.fill" size={16} color={subTextColor} />} />
+        <InputField
+          label="Phone or Email"
+          placeholder="+2348012345678 or jane@example.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={identifier}
+          onChangeText={setIdentifier}
+          maxLength={100}
+          leftIcon={<IconSymbol name="person.fill" size={16} color={subTextColor} />}
+        />
         <InputField
           label="Password"
           placeholder="••••••••"
           secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
           leftIcon={<IconSymbol name="lock.fill" size={16} color={subTextColor} />}
           rightLabel={<TouchableOpacity onPress={() => router.push('/forgot-password')}><Text style={[s.forgot, { color: theme.green }]}>Forgot?</Text></TouchableOpacity>}
           rightIcon={
@@ -42,9 +97,41 @@ export default function LoginScreen() {
         />
       </View>
 
-      <PrimaryButton label="Continue →" onPress={() => router.replace('/(tabs)')} style={s.cta} />
+      {error ? <Text style={s.error}>{error}</Text> : null}
 
-      <Text style={[s.orText, { color: subTextColor }]}>Or continue with</Text>
+      <PrimaryButton label={loading ? 'Signing in…' : 'Continue →'} onPress={handleLogin} style={s.cta} disabled={loading} />
+
+      {showQuickAccess && (
+        <>
+          <Text style={[s.orText, { color: subTextColor }]}>Or unlock with</Text>
+          <View style={s.quickRow}>
+            {showBiometric && (
+              <TouchableOpacity
+                style={[s.quickBtn, { borderColor: theme.green + '50', backgroundColor: theme.green + '12' }]}
+                onPress={handleBiometric}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name={biometricIcon} size={26} color={theme.green} />
+                <Text style={[s.quickLabel, { color: theme.green }]}>{biometricLabel}</Text>
+              </TouchableOpacity>
+            )}
+            {showPasscode && (
+              <TouchableOpacity
+                style={[s.quickBtn, { borderColor: subTextColor + '40', backgroundColor: subTextColor + '10' }]}
+                onPress={handlePasscode}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="lock.fill" size={26} color={subTextColor} />
+                <Text style={[s.quickLabel, { color: subTextColor }]}>PIN</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </>
+      )}
+
+      {!showQuickAccess && (
+        <Text style={[s.orText, { color: subTextColor }]}>Or continue with</Text>
+      )}
 
       <View style={s.socialRow}>
         <SocialButton label="Google" icon={<IconSymbol name="globe" size={20} color={textColor} />} />
@@ -69,12 +156,20 @@ const s = StyleSheet.create({
   helpBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 32, fontWeight: '800', marginBottom: 10 },
   subtitle: { fontSize: 14, lineHeight: 22, marginBottom: 32 },
-  form: { gap: 20, marginBottom: 24 },
-  cta: { marginBottom: 24 },
-  orText: { textAlign: 'center', fontSize: 13, marginBottom: 16 },
+  form: { gap: 20, marginBottom: 12 },
+  cta: { marginBottom: 20 },
+  orText: { textAlign: 'center', fontSize: 13, marginBottom: 14 },
+  quickRow: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginBottom: 20 },
+  quickBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 24, paddingVertical: 14,
+    borderRadius: 14, borderWidth: 1.5,
+  },
+  quickLabel: { fontSize: 14, fontWeight: '600' },
   socialRow: { flexDirection: 'row', gap: 12, marginBottom: 28 },
   signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 40 },
   signupText: { fontSize: 14 },
   signupLink: { fontWeight: '700', fontSize: 14 },
   forgot: { fontSize: 13, fontWeight: '600' },
+  error: { color: '#ff6b6b', fontSize: 13, marginBottom: 12, textAlign: 'center' },
 });

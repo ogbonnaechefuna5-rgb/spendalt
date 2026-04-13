@@ -22,10 +22,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       isDark,
       toggleTheme: () => setIsDark(v => !v),
       theme,
-      textColor: isDark ? '#fff' : '#0D1F17',
-      subTextColor: isDark ? '#ffffff60' : '#4a6b5a',
-      borderColor: isDark ? '#ffffff10' : '#00000010',
-      dividerColor: isDark ? '#ffffff08' : '#00000008',
+      textColor: isDark ? '#FFFFFF' : '#1A0F3C',
+      subTextColor: isDark ? '#8E8E93' : '#6B5FA0',
+      borderColor: isDark ? '#ffffff12' : '#7C3AED18',
+      dividerColor: isDark ? '#ffffff0A' : '#7C3AED10',
     }}>
       {children}
     </ThemeContext.Provider>

@@ -1,15 +1,29 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { BalanceCard } from '@/components/dashboard/balance-card';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { TransactionItem } from '@/components/dashboard/transaction-item';
-import { TRANSACTIONS } from '@/constants/transactions';
 import { useTheme } from '@/context/theme-context';
+import { getTransactions, Transaction } from '@/services/transactions-api';
+import { getInsights, Insights } from '@/services/analytics-api';
+
+const fmt = (n: number) => `₦${n.toLocaleString('en-NG')}`;
 
 export default function HomeScreen() {
   const router = useRouter();
   const { theme, textColor, borderColor, dividerColor } = useTheme();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [insights, setInsights] = useState<Insights | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([getTransactions(1, 5), getInsights()])
+      .then(([txs, ins]) => { setTransactions(txs); setInsights(ins); })
+      .catch(() => {}) // 401 handled globally in api.ts
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bgDeep }} contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
@@ -29,11 +43,11 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <BalanceCard balance="₦2,450,000.00" account="Main Savings Account" />
+      <BalanceCard balance={insights ? fmt(insights.total_income - insights.total_spending) : '—'} account="Main Account" />
 
       <View style={s.statsRow}>
-        <StatCard label="INCOME" amount="₦850,000" trend="+12%" positive />
-        <StatCard label="SPENDING" amount="₦420,000" trend="-5%" positive={false} />
+        <StatCard label="INCOME" amount={insights ? fmt(insights.total_income) : '—'} trend="" positive />
+        <StatCard label="SPENDING" amount={insights ? fmt(insights.total_spending) : '—'} trend="" positive={false} />
       </View>
 
       <View style={s.txHeader}>
@@ -43,14 +57,21 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={[s.txList, { backgroundColor: theme.card, borderColor }]}>
-        {TRANSACTIONS.map((tx, i) => (
-          <View key={tx.id}>
-            <TransactionItem {...tx} />
-            {i < TRANSACTIONS.length - 1 && <View style={[s.divider, { backgroundColor: dividerColor }]} />}
+      {loading
+        ? <ActivityIndicator color={theme.green} />
+        : <View style={[s.txList, { backgroundColor: theme.card, borderColor }]}>
+            {transactions.map((tx, i) => (
+              <View key={tx.id}>
+                <TransactionItem
+                  id={tx.id} name={tx.merchant || tx.description}
+                  category={tx.category} amount={tx.type === 'credit' ? tx.amount : -tx.amount}
+                  date={tx.transaction_date} icon="cart.fill"
+                />
+                {i < transactions.length - 1 && <View style={[s.divider, { backgroundColor: dividerColor }]} />}
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
+      }
     </ScrollView>
   );
 }

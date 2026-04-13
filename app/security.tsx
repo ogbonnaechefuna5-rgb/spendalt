@@ -1,20 +1,95 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SettingsRow } from '@/components/ui/settings-row';
+import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
-
-const SESSIONS = [
-  { id: '1', device: 'iPhone 15 Pro', info: 'San Francisco, USA • App v4.2.1', icon: 'iphone' as const, current: true },
-  { id: '2', device: 'MacBook Pro M2', info: 'Chrome Browser • 2 hours ago', icon: 'laptopcomputer' as const, current: false },
-];
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { getSessions, revokeAllSessions, changePassword, UserSession } from '@/services/user-api';
+import { useUI } from '@/context/ui-context';
 
 export default function SecurityScreen() {
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor, dividerColor } = useTheme();
-  const [biometric, setBiometric] = useState(false);
-  const [txPin, setTxPin] = useState(false);
+  const {
+    hasBiometrics,
+    biometricEnabled,
+    passcodeEnabled,
+    enableBiometric,
+    disableBiometric,
+    enablePasscode,
+    disablePasscode,
+  } = useAuth();
+
+  const [bioLoading, setBioLoading] = useState(false);
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const { showDialog, showToast } = useUI();
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState('');
+
+  useEffect(() => { getSessions().then(setSessions).catch(() => {}); }, []);
+
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword) { setPwError('Both fields are required.'); return; }
+    setPwLoading(true); setPwError('');
+    try {
+      await changePassword({ old_password: oldPassword, new_password: newPassword });
+      setOldPassword(''); setNewPassword('');
+      showToast({ message: 'Password changed successfully.', type: 'success' });
+    } catch (e: any) {
+      setPwError(e.message ?? 'Failed to change password.');
+    } finally { setPwLoading(false); }
+  };
+
+  const handleRevokeAll = () => {
+    showDialog({
+      title: 'Logout All Sessions',
+      message: 'This will sign you out of all devices.',
+      actions: [
+        { label: 'Cancel', variant: 'ghost', onPress: () => {} },
+        { label: 'Logout All', variant: 'destructive', onPress: async () => {
+          await revokeAllSessions();
+          setSessions([]);
+          showToast({ message: 'All sessions revoked.', type: 'info' });
+        }},
+      ],
+    });
+  };
+
+  const handleBiometricToggle = async (value: boolean) => {
+    if (value) {
+      setBioLoading(true);
+      const success = await enableBiometric();
+      setBioLoading(false);
+      if (!success) showToast({ message: 'Could not enable biometric login.', type: 'error' });
+    } else {
+      showDialog({
+        title: 'Disable Biometric Login',
+        message: 'Are you sure you want to disable biometric login?',
+        actions: [
+          { label: 'Cancel', variant: 'ghost', onPress: () => {} },
+          { label: 'Disable', variant: 'destructive', onPress: disableBiometric },
+        ],
+      });
+    }
+  };
+
+  const handlePasscodeToggle = async (value: boolean) => {
+    if (value) {
+      router.push('/setup-pin');
+    } else {
+      showDialog({
+        title: 'Disable Passcode',
+        message: 'This will remove your saved PIN. Are you sure?',
+        actions: [
+          { label: 'Cancel', variant: 'ghost', onPress: () => {} },
+          { label: 'Disable', variant: 'destructive', onPress: disablePasscode },
+        ],
+      });
+    }
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bgDeep }} contentContainerStyle={s.container} showsVerticalScrollIndicator={false}>
@@ -30,7 +105,13 @@ export default function SecurityScreen() {
 
       <Text style={[s.sectionLabel, { color: theme.green }]}>ACCOUNT PROTECTION</Text>
       <View style={[s.section, { backgroundColor: theme.card, borderColor }]}>
-        <SettingsRow icon={<IconSymbol name="lock.fill" size={20} color={theme.green} />} title="Change Password" subtitle="Last changed 3 months ago" />
+        <SettingsRow icon={<IconSymbol name="lock.fill" size={20} color={theme.green} />} title="Change Password" subtitle="Last changed 3 months ago" onPress={() =>
+          showDialog({
+            title: 'Change Password',
+            message: 'Use the security settings to update your password.',
+            actions: [{ label: 'OK', variant: 'primary', onPress: () => {} }],
+          })
+        } />
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
         <SettingsRow
           icon={<IconSymbol name="checkmark.shield.fill" size={20} color={theme.green} />}
@@ -46,26 +127,53 @@ export default function SecurityScreen() {
 
       <Text style={[s.sectionLabel, { color: theme.green }]}>ACCESS METHODS</Text>
       <View style={[s.section, { backgroundColor: theme.card, borderColor }]}>
+
+        {/* Biometric */}
         <View style={s.toggleRow}>
           <View style={[s.toggleIcon, { backgroundColor: theme.bgMid }]}>
-            <IconSymbol name="touchid" size={20} color={theme.green} />
+            <IconSymbol name="touchid" size={20} color={hasBiometrics ? theme.green : subTextColor} />
           </View>
           <View style={s.toggleText}>
             <Text style={[s.toggleTitle, { color: textColor }]}>Biometric Login</Text>
-            <Text style={[s.toggleSub, { color: subTextColor }]}>Use Face ID or Fingerprint</Text>
+            <Text style={[s.toggleSub, { color: subTextColor }]}>
+              {hasBiometrics ? 'Use Face ID or Fingerprint' : 'Not available on this device'}
+            </Text>
           </View>
-          <Switch value={biometric} onValueChange={setBiometric} trackColor={{ false: '#ccc', true: theme.green }} thumbColor="#fff" />
+          <Switch
+            value={biometricEnabled}
+            onValueChange={handleBiometricToggle}
+            disabled={!hasBiometrics || bioLoading}
+            trackColor={{ false: '#ccc', true: theme.green }}
+            thumbColor="#fff"
+          />
         </View>
+
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
+
+        {/* Passcode / PIN */}
         <View style={s.toggleRow}>
           <View style={[s.toggleIcon, { backgroundColor: theme.bgMid }]}>
             <IconSymbol name="number.square.fill" size={20} color={theme.green} />
           </View>
           <View style={s.toggleText}>
-            <Text style={[s.toggleTitle, { color: textColor }]}>Transaction PIN</Text>
-            <Text style={[s.toggleSub, { color: subTextColor }]}>Required for transfers</Text>
+            <Text style={[s.toggleTitle, { color: textColor }]}>App Passcode</Text>
+            <Text style={[s.toggleSub, { color: subTextColor }]}>
+              {passcodeEnabled ? 'PIN set — tap to change' : 'Set a 6-digit PIN to unlock'}
+            </Text>
           </View>
-          <Switch value={txPin} onValueChange={setTxPin} trackColor={{ false: '#ccc', true: theme.green }} thumbColor="#fff" />
+          <View style={s.passcodeRight}>
+            <Switch
+              value={passcodeEnabled}
+              onValueChange={handlePasscodeToggle}
+              trackColor={{ false: '#ccc', true: theme.green }}
+              thumbColor="#fff"
+            />
+            {passcodeEnabled && (
+              <TouchableOpacity onPress={() => router.push('/setup-pin')}>
+                <Text style={[s.changePin, { color: theme.green }]}>Change</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -76,22 +184,22 @@ export default function SecurityScreen() {
             <IconSymbol name="desktopcomputer" size={20} color={theme.green} />
             <Text style={[s.sessionsTitle, { color: textColor }]}>Active Sessions</Text>
           </View>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={handleRevokeAll}>
             <Text style={[s.logoutAll, { color: theme.green }]}>LOGOUT ALL</Text>
           </TouchableOpacity>
         </View>
-        {SESSIONS.map(session => (
+        {(sessions.length > 0 ? sessions : []).map((session, i) => (
           <View key={session.id}>
             <View style={[s.divider, { backgroundColor: dividerColor }]} />
             <View style={s.sessionRow}>
               <View style={[s.toggleIcon, { backgroundColor: theme.bgMid }]}>
-                <IconSymbol name={session.icon} size={20} color={theme.green} />
+                <IconSymbol name="iphone" size={20} color={theme.green} />
               </View>
               <View style={s.toggleText}>
                 <Text style={[s.toggleTitle, { color: textColor }]}>{session.device}</Text>
-                <Text style={[s.toggleSub, { color: subTextColor }]}>{session.info}</Text>
+                <Text style={[s.toggleSub, { color: subTextColor }]}>{session.ip_address} • {new Date(session.created_at).toLocaleDateString()}</Text>
               </View>
-              {session.current
+              {i === 0
                 ? <View style={[s.currentBadge, { backgroundColor: theme.bgMid, borderColor: theme.green }]}><Text style={[s.currentText, { color: theme.green }]}>CURRENT</Text></View>
                 : <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color={theme.green} />
               }
@@ -119,6 +227,8 @@ const s = StyleSheet.create({
   toggleText: { flex: 1, gap: 3 },
   toggleTitle: { fontWeight: '600', fontSize: 15 },
   toggleSub: { fontSize: 12 },
+  passcodeRight: { alignItems: 'center', gap: 4 },
+  changePin: { fontSize: 11, fontWeight: '700' },
   sessionsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 },
   sessionsLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sessionsTitle: { fontWeight: '600', fontSize: 15 },

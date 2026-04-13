@@ -1,23 +1,36 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Logo } from '@/components/ui/logo';
-import { ProgressBar } from '@/components/ui/progress-bar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Logo } from '@/components/ui/logo';
 import { Brand } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
+import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 export default function SplashScreen() {
   const router = useRouter();
+  const { isFirstLaunch, user, biometricEnabled, passcodeEnabled } = useAuth();
+
+  useEffect(() => {
+    if (isFirstLaunch === null) return; // still loading
+
+    const timer = setTimeout(() => {
+      if (isFirstLaunch) {
+        router.replace('/onboarding');
+      } else if (user) {
+        router.replace('/local-auth'); // returning user with saved session → biometric unlock
+      } else {
+        router.replace('/login'); // no session → regular login
+      }
+    }, 1800);
+
+    return () => clearTimeout(timer);
+  }, [isFirstLaunch]); // intentionally exclude user — only decide route once on load
 
   return (
     <View style={s.container}>
       <Logo size="lg" showWordmark={false} />
       <Text style={s.title}>Spendalt</Text>
       <Text style={s.subtitle}>Understand Your Money</Text>
-
-      <View style={s.progressSection}>
-        <Text style={s.label}>SYNCHRONIZING</Text>
-        <ProgressBar onComplete={() => router.replace('/onboarding')} />
-      </View>
 
       <View style={s.badge}>
         <IconSymbol name="lock.fill" size={14} color={Brand.green} />
@@ -34,8 +47,6 @@ const s = StyleSheet.create({
   },
   title: { fontSize: 48, fontWeight: '800', color: '#fff', marginBottom: 8, marginTop: 32 },
   subtitle: { fontSize: 18, fontWeight: '600', color: Brand.green, marginBottom: 60 },
-  progressSection: { width: '100%', alignItems: 'center', gap: 12 },
-  label: { fontSize: 12, letterSpacing: 2, color: '#ffffff80', fontWeight: '600' },
   badge: {
     position: 'absolute', bottom: 48,
     flexDirection: 'row', alignItems: 'center', gap: 8,

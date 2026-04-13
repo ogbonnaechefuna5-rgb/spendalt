@@ -21,6 +21,7 @@ export function InputField({ label, leftIcon, rightIcon, rightLabel, style, ...p
       <View style={[s.inputRow, { backgroundColor: theme.card, borderColor }]}>
         {leftIcon && <View style={s.iconSlot}>{leftIcon}</View>}
         <TextInput
+          maxLength={255}
           style={[s.input, { color: textColor }, leftIcon && s.inputWithLeft, rightIcon && s.inputWithRight, style]}
           placeholderTextColor={theme.bgMid === theme.bgDeep ? '#ffffff30' : '#00000030'}
           {...props}

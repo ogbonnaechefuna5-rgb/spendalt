@@ -1,12 +1,12 @@
 import { TransactionItem } from '@/components/dashboard/transaction-item';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { TRANSACTION_GROUPS } from '@/constants/transactions';
 import { useTheme } from '@/context/theme-context';
+import { getTransactions, groupByDate } from '@/services/transactions-api';
 import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Modal, ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
 const FILTERS = ['All', 'Food', 'Transport', 'Shopping', 'Bills', 'Income'];
 
@@ -185,13 +185,19 @@ export default function HistoryScreen() {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor, dividerColor } = useTheme();
 
-  const filtered = TRANSACTION_GROUPS.map(group => ({
+  useEffect(() => {
+    getTransactions(1, 100).then(setTransactions).finally(() => setLoading(false));
+  }, []);
+
+  const filtered = groupByDate(transactions).map(group => ({
     ...group,
     data: group.data.filter(tx => {
-      const matchesQuery = tx.name.toLowerCase().includes(query.toLowerCase());
+      const matchesQuery = (tx.merchant || tx.description || '').toLowerCase().includes(query.toLowerCase());
       const matchesFilter = activeFilter === 'All' || tx.category.toLowerCase().includes(activeFilter.toLowerCase());
       return matchesQuery && matchesFilter;
     }),
@@ -220,33 +226,41 @@ export default function HistoryScreen() {
         />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filtersScroll} contentContainerStyle={s.filters}>
-        {FILTERS.map(f => (
-          <TouchableOpacity
-            key={f}
-            style={[s.chip, { backgroundColor: theme.card, borderColor }, activeFilter === f && { backgroundColor: theme.green, borderColor: theme.green }]}
-            onPress={() => setActiveFilter(f)}
-          >
-            {f !== 'All' && (
-              <IconSymbol
-                name={f === 'Food' ? 'fork.knife' : f === 'Transport' ? 'car.fill' : f === 'Shopping' ? 'bag.fill' : f === 'Bills' ? 'bolt.fill' : 'banknote.fill'}
-                size={13}
-                color={activeFilter === f ? theme.bgDeep : subTextColor}
-              />
-            )}
-            <Text style={[s.chipText, { color: subTextColor }, activeFilter === f && { color: theme.bgDeep }]}>{f}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={s.filtersWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={s.filtersScroll}>
+          {FILTERS.map(f => (
+            <TouchableOpacity
+              key={f}
+              style={[s.chip, { backgroundColor: theme.card, borderColor }, activeFilter === f && { backgroundColor: theme.green, borderColor: theme.green }]}
+              onPress={() => setActiveFilter(f)}
+            >
+              {f !== 'All' && (
+                <IconSymbol
+                  name={f === 'Food' ? 'fork.knife' : f === 'Transport' ? 'car.fill' : f === 'Shopping' ? 'bag.fill' : f === 'Bills' ? 'bolt.fill' : 'banknote.fill'}
+                  size={13}
+                  color={activeFilter === f ? theme.bgDeep : subTextColor}
+                />
+              )}
+              <Text style={[s.chipText, { color: subTextColor }, activeFilter === f && { color: theme.bgDeep }]}>{f}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
-        {filtered.map(group => (
+        {loading
+          ? <ActivityIndicator color={theme.green} style={{ marginTop: 32 }} />
+          : filtered.map(group => (
           <View key={group.title}>
             <Text style={[s.groupTitle, { color: theme.green }]}>{group.title}</Text>
             <View style={[s.groupCard, { backgroundColor: theme.card, borderColor }]}>
               {group.data.map((tx, i) => (
                 <View key={tx.id}>
-                  <TransactionItem {...tx} />
+                  <TransactionItem
+                    id={tx.id} name={tx.merchant || tx.description}
+                    category={tx.category} amount={tx.type === 'credit' ? tx.amount : -tx.amount}
+                    date={tx.transaction_date} icon="cart.fill"
+                  />
                   {i < group.data.length - 1 && <View style={[s.divider, { backgroundColor: dividerColor }]} />}
                 </View>
               ))}
@@ -272,8 +286,9 @@ const s = StyleSheet.create({
   headerTitle: { fontWeight: '800', fontSize: 20 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, marginHorizontal: 20, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, marginBottom: 16 },
   searchInput: { flex: 1, fontSize: 14 },
-  filtersScroll: { flexShrink: 0, marginBottom: 8 },
-  filters: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
+  filtersWrap: { height: 48, marginBottom: 8 },
+  filtersScroll: { flex: 1 },
+  filters: { paddingHorizontal: 20, gap: 8, alignItems: 'center', flexDirection: 'row' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, borderWidth: 1 },
   chipText: { fontWeight: '600', fontSize: 13 },
   list: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100, gap: 24 },

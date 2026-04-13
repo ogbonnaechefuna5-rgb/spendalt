@@ -76,7 +76,6 @@ export default function TabLayout() {
         />
         <Tabs.Screen name="profile" options={{ title: 'SETTINGS', tabBarIcon: ({ color }) => <IconSymbol size={24} name="gearshape.fill" color={color} /> }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
-        <Tabs.Screen name="savings" options={{ href: null }} />
         <Tabs.Screen name="history" options={{ href: null }} />
         <Tabs.Screen name="wallet" options={{ href: null }} />
         <Tabs.Screen name="cards" options={{ href: null }} />

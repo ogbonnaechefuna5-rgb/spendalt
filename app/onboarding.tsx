@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
-import { Dimensions, FlatList, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { OnboardingSlideView } from '@/components/onboarding/onboarding-slide';
 import { ONBOARDING_SLIDES } from '@/constants/onboarding-slides';
 import { Brand } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
+import { useRouter } from 'expo-router';
+import { useRef, useState } from 'react';
+import { Dimensions, FlatList, StyleSheet, View } from 'react-native';
 
 const WIDTH = Dimensions.get('window').width;
 
@@ -11,12 +12,14 @@ export default function OnboardingScreen() {
   const [index, setIndex] = useState(0);
   const listRef = useRef<FlatList>(null);
   const router = useRouter();
+  const { markOnboardingDone } = useAuth();
 
-  const next = () => {
+  const next = async () => {
     if (index < ONBOARDING_SLIDES.length - 1) {
       listRef.current?.scrollToIndex({ index: index + 1 });
       setIndex(index + 1);
     } else {
+      await markOnboardingDone();
       router.replace('/login');
     }
   };

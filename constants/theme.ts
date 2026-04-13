@@ -28,19 +28,19 @@ export const Colors = {
 };
 
 export const Brand = {
-  green: '#2ECC9A',
-  bgDark: '#052E20',
-  bgMid: '#0A3D2B',
-  bgDeep: '#071A12',
-  card: '#0D2B1E',
+  green: '#7C3AED',
+  bgDark: '#141414',
+  bgMid: '#1C1C1E',
+  bgDeep: '#0D0D0D',
+  card: '#1C1C1E',
 };
 
 export const BrandLight = {
-  green: '#1aaa7a',
-  bgDark: '#e8f5f0',
-  bgMid: '#d0ece3',
-  bgDeep: '#f0faf6',
-  card: '#ffffff',
+  green: '#7C3AED',
+  bgDark: '#EDE9FF',
+  bgMid: '#DDD6FE',
+  bgDeep: '#F5F3FF',
+  card: '#FFFFFF',
 };
 
 export const Fonts = Platform.select({

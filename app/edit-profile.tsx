@@ -1,15 +1,43 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { InputField } from '@/components/ui/input-field';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { useTheme } from '@/context/theme-context';
+import { getProfile, updateProfile, UserProfile } from '@/services/user-api';
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { theme, textColor, subTextColor, borderColor } = useTheme();
-  const [biometric, setBiometric] = useState(true);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getProfile().then(p => {
+      setProfile(p);
+      setFirstName(p.first_name);
+      setLastName(p.last_name);
+      setPhone(p.phone);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await updateProfile({ first_name: firstName, last_name: lastName, phone });
+      router.back();
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to update profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bgDeep }} contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
@@ -32,28 +60,18 @@ export default function EditProfileScreen() {
             <IconSymbol name="camera.fill" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
-        <Text style={[s.name, { color: textColor }]}>Alex Spendalt</Text>
-        <Text style={[s.since, { color: theme.green }]}>Member since Nov 2023</Text>
+        <Text style={[s.name, { color: textColor }]}>{profile ? `${profile.first_name} ${profile.last_name}` : '—'}</Text>
+        <Text style={[s.since, { color: theme.green }]}>{profile ? profile.phone : ''}</Text>
       </View>
 
       <View style={s.form}>
-        <InputField label="FULL NAME" defaultValue="Alex Spendalt" leftIcon={<IconSymbol name="person.fill" size={16} color={theme.green} />} />
-        <InputField label="EMAIL ADDRESS" defaultValue="alex.spendalt@fintech.com" keyboardType="email-address" autoCapitalize="none" leftIcon={<IconSymbol name="envelope.fill" size={16} color={theme.green} />} />
-        <InputField label="PHONE NUMBER" defaultValue="+1 (555) 000-1234" keyboardType="phone-pad" leftIcon={<IconSymbol name="phone.fill" size={16} color={theme.green} />} />
+        <InputField label="FIRST NAME" value={firstName} onChangeText={setFirstName} leftIcon={<IconSymbol name="person.fill" size={16} color={theme.green} />} />
+        <InputField label="LAST NAME" value={lastName} onChangeText={setLastName} leftIcon={<IconSymbol name="person.fill" size={16} color={theme.green} />} />
+        <InputField label="PHONE NUMBER" value={phone} onChangeText={setPhone} keyboardType="phone-pad" leftIcon={<IconSymbol name="phone.fill" size={16} color={theme.green} />} />
       </View>
 
-      <View style={[s.biometricRow, { backgroundColor: theme.card, borderColor }]}>
-        <View style={[s.biometricIcon, { backgroundColor: theme.bgMid }]}>
-          <IconSymbol name="touchid" size={24} color={theme.green} />
-        </View>
-        <View style={s.biometricText}>
-          <Text style={[s.biometricTitle, { color: textColor }]}>Biometric Login</Text>
-          <Text style={[s.biometricSub, { color: theme.green }]}>FAST AND SECURE ACCESS</Text>
-        </View>
-        <Switch value={biometric} onValueChange={setBiometric} trackColor={{ false: '#ccc', true: theme.green }} thumbColor="#fff" />
-      </View>
-
-      <PrimaryButton label="Save Changes" onPress={() => router.back()} />
+      {error ? <Text style={s.error}>{error}</Text> : null}
+      <PrimaryButton label={loading ? 'Saving…' : 'Save Changes'} onPress={handleSave} disabled={loading} />
     </ScrollView>
   );
 }
@@ -76,4 +94,5 @@ const s = StyleSheet.create({
   biometricText: { flex: 1, gap: 3 },
   biometricTitle: { fontWeight: '700', fontSize: 15 },
   biometricSub: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  error: { color: '#ff6b6b', fontSize: 13, textAlign: 'center', marginBottom: 12 },
 });
