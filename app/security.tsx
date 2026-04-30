@@ -5,7 +5,7 @@ import { useTheme } from '@/context/theme-context';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { getSessions, revokeAllSessions, changePassword, UserSession } from '@/services/user-api';
+import { getSessions, revokeAllSessions, revokeSession, changePassword, UserSession } from '@/services/user-api';
 import { useUI } from '@/context/ui-context';
 
 export default function SecurityScreen() {
@@ -19,6 +19,7 @@ export default function SecurityScreen() {
     disableBiometric,
     enablePasscode,
     disablePasscode,
+    logout,
   } = useAuth();
 
   const [bioLoading, setBioLoading] = useState(false);
@@ -50,9 +51,11 @@ export default function SecurityScreen() {
       actions: [
         { label: 'Cancel', variant: 'ghost', onPress: () => {} },
         { label: 'Logout All', variant: 'destructive', onPress: async () => {
-          await revokeAllSessions();
-          setSessions([]);
-          showToast({ message: 'All sessions revoked.', type: 'info' });
+          try {
+            await revokeAllSessions();
+          } catch { /* session already expired — treat as success */ }
+          await logout();
+          router.replace('/login');
         }},
       ],
     });
@@ -78,11 +81,11 @@ export default function SecurityScreen() {
 
   const handlePasscodeToggle = async (value: boolean) => {
     if (value) {
-      router.push('/setup-pin');
+      router.push('/setup-passcode');
     } else {
       showDialog({
         title: 'Disable Passcode',
-        message: 'This will remove your saved PIN. Are you sure?',
+        message: 'This will remove your saved passcode. Are you sure?',
         actions: [
           { label: 'Cancel', variant: 'ghost', onPress: () => {} },
           { label: 'Disable', variant: 'destructive', onPress: disablePasscode },
@@ -150,7 +153,7 @@ export default function SecurityScreen() {
 
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
 
-        {/* Passcode / PIN */}
+        {/* Passcode */}
         <View style={s.toggleRow}>
           <View style={[s.toggleIcon, { backgroundColor: theme.bgMid }]}>
             <IconSymbol name="number.square.fill" size={20} color={theme.green} />
@@ -158,7 +161,7 @@ export default function SecurityScreen() {
           <View style={s.toggleText}>
             <Text style={[s.toggleTitle, { color: textColor }]}>App Passcode</Text>
             <Text style={[s.toggleSub, { color: subTextColor }]}>
-              {passcodeEnabled ? 'PIN set — tap to change' : 'Set a 6-digit PIN to unlock'}
+              {passcodeEnabled ? 'Passcode set — tap to change' : 'Set a 6-digit passcode to unlock'}
             </Text>
           </View>
           <View style={s.passcodeRight}>
@@ -169,7 +172,7 @@ export default function SecurityScreen() {
               thumbColor="#fff"
             />
             {passcodeEnabled && (
-              <TouchableOpacity onPress={() => router.push('/setup-pin')}>
+              <TouchableOpacity onPress={() => router.push('/setup-passcode')}>
                 <Text style={[s.changePin, { color: theme.green }]}>Change</Text>
               </TouchableOpacity>
             )}
@@ -196,12 +199,24 @@ export default function SecurityScreen() {
                 <IconSymbol name="iphone" size={20} color={theme.green} />
               </View>
               <View style={s.toggleText}>
-                <Text style={[s.toggleTitle, { color: textColor }]}>{session.device}</Text>
-                <Text style={[s.toggleSub, { color: subTextColor }]}>{session.ip_address} • {new Date(session.created_at).toLocaleDateString()}</Text>
+                <Text style={[s.toggleTitle, { color: textColor }]}>
+                  {session.device || session.os || 'Unknown Device'}
+                </Text>
+                <Text style={[s.toggleSub, { color: subTextColor }]}>
+                  {[session.device_type, session.os, session.app_version].filter(Boolean).join(' · ')}
+                </Text>
+                <Text style={[s.toggleSub, { color: subTextColor }]}>
+                  {session.ip_address} · {new Date(session.created_at).toLocaleDateString()}
+                </Text>
               </View>
               {i === 0
                 ? <View style={[s.currentBadge, { backgroundColor: theme.bgMid, borderColor: theme.green }]}><Text style={[s.currentText, { color: theme.green }]}>CURRENT</Text></View>
-                : <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color={theme.green} />
+                : <TouchableOpacity onPress={async () => {
+                    await revokeSession(session.id);
+                    setSessions(prev => prev.filter(s => s.id !== session.id));
+                  }}>
+                    <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color={theme.green} />
+                  </TouchableOpacity>
               }
             </View>
           </View>

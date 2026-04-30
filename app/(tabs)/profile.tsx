@@ -5,7 +5,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SettingsRow } from '@/components/ui/settings-row';
 import { useTheme } from '@/context/theme-context';
 import { useAuth } from '@/context/auth-context';
-import { getProfile, logout, UserProfile } from '@/services/user-api';
+import { getProfile, UserProfile } from '@/services/user-api';
 import { useUI } from '@/context/ui-context';
 
 export default function ProfileScreen() {
@@ -24,7 +24,6 @@ export default function ProfileScreen() {
       actions: [
         { label: 'Cancel', variant: 'ghost', onPress: () => {} },
         { label: 'Log Out', variant: 'destructive', onPress: async () => {
-          try { await logout(); } catch {}
           await authLogout();
           router.replace('/login');
         }},
@@ -59,7 +58,7 @@ export default function ProfileScreen() {
       <View style={[s.section, { backgroundColor: theme.card, borderColor }]}>
         <SettingsRow icon={<IconSymbol name="person.fill" size={20} color={theme.green} />} title="Edit profile" subtitle="Update your personal details" onPress={() => router.push('/edit-profile')} />
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
-        <SettingsRow icon={<IconSymbol name="lock.shield.fill" size={20} color={theme.green} />} title="Security" subtitle="2FA, Password and Biometrics" onPress={() => router.push('/security')} />
+        <SettingsRow icon={<IconSymbol name="lock.shield.fill" size={20} color={theme.green} />} title="Security" subtitle="2FA, Passcode and Biometrics" onPress={() => router.push('/security')} />
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
         <SettingsRow icon={<IconSymbol name="lock.fill" size={20} color={theme.green} />} title="Data permissions" subtitle="Manage connected bank accounts" onPress={() => router.push('/data-permissions')} />
       </View>

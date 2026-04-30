@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const PIN_LENGTH = 6;
+const PASSCODE_LENGTH = 6;
 
 const KEYS = [
   { num: '1', sub: '' },
@@ -21,41 +21,41 @@ const KEYS = [
   { num: '⌫', sub: '' },
 ];
 
-export default function SetupPinScreen() {
+export default function SetupPasscodeScreen() {
   const router = useRouter();
-  const { savePin } = useAuth();
+  const { savePasscode } = useAuth();
 
   const [step, setStep] = useState<'create' | 'confirm'>('create');
-  const [pin, setPin] = useState('');
-  const [firstPin, setFirstPin] = useState('');
+  const [passcode, setPasscode] = useState('');
+  const [firstPasscode, setFirstPasscode] = useState('');
   const [error, setError] = useState('');
 
   const handleKey = (key: string) => {
     if (key === '') return;
     if (key === '⌫') {
-      setPin(p => p.slice(0, -1));
+      setPasscode(p => p.slice(0, -1));
       setError('');
       return;
     }
-    if (pin.length >= PIN_LENGTH) return;
-    const next = pin + key;
-    setPin(next);
-    if (next.length === PIN_LENGTH) setTimeout(() => advance(next), 150);
+    if (passcode.length >= PASSCODE_LENGTH) return;
+    const next = passcode + key;
+    setPasscode(next);
+    if (next.length === PASSCODE_LENGTH) setTimeout(() => advance(next), 150);
   };
 
   const advance = (entered: string) => {
     if (step === 'create') {
-      setFirstPin(entered);
-      setPin('');
+      setFirstPasscode(entered);
+      setPasscode('');
       setStep('confirm');
     } else {
-      if (entered === firstPin) {
-        savePin(entered).then(() => router.back());
+      if (entered === firstPasscode) {
+        savePasscode(entered).then(() => router.back());
       } else {
         setError('Passcodes did not match. Try again.');
-        setPin('');
+        setPasscode('');
         setStep('create');
-        setFirstPin('');
+        setFirstPasscode('');
       }
     }
   };
@@ -71,16 +71,14 @@ export default function SetupPinScreen() {
           : 'Enter your new passcode again'}
       </Text>
 
-      {/* Dots */}
       <View style={s.dots}>
-        {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-          <View key={i} style={[s.dot, i < pin.length && s.dotFilled]} />
+        {Array.from({ length: PASSCODE_LENGTH }).map((_, i) => (
+          <View key={i} style={[s.dot, i < passcode.length && s.dotFilled]} />
         ))}
       </View>
 
       {error ? <Text style={s.error}>{error}</Text> : null}
 
-      {/* Keypad */}
       <View style={s.keypad}>
         {KEYS.map((k, i) => {
           const isEmpty = k.num === '';

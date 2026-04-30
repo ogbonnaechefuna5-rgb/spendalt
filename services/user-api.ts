@@ -29,9 +29,25 @@ export type LinkedAccount = {
 export type UserSession = {
   id: string;
   device: string;
+  device_type: string;
+  os: string;
+  app_version: string;
   ip_address: string;
   created_at: string;
   expires_at: string;
+};
+
+export type ActivityLog = {
+  id: string;
+  method: string;
+  path: string;
+  status: number;
+  latency_ms: number;
+  device_type: string;
+  os: string;
+  app_version: string;
+  ip: string;
+  created_at: string;
 };
 
 export async function getProfile(): Promise<UserProfile> {
@@ -89,6 +105,7 @@ export async function revokeAllSessions(): Promise<void> {
   await apiRequest('/user/sessions', { method: 'DELETE' });
 }
 
-export async function logout(): Promise<void> {
-  await apiRequest('/auth/logout', { method: 'POST' });
+export async function revokeSession(id: string): Promise<void> {
+  await apiRequest(`/user/sessions/${id}`, { method: 'DELETE' });
 }
+

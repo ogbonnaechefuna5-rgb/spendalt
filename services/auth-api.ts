@@ -54,6 +54,7 @@ export async function logout(refreshToken?: string): Promise<void> {
   await apiRequest('/auth/logout', {
     method: 'POST',
     body: refreshToken ? { refresh_token: refreshToken } : {},
+    auth: false,
   });
 }
 

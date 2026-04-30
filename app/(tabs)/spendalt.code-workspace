@@ -7,6 +7,9 @@
 		{
 			"name": "backend",
 			"path": "../../../backend"
+		},
+		{
+			"path": "../../../../Downloads/Modern Glassmorphic Design"
 		}
 	],
 	"settings": {

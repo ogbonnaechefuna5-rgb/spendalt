@@ -50,7 +50,7 @@ export default function BudgetScreen() {
 
   const load = () => {
     setLoading(true);
-    getBudgets().then(setBudgets).finally(() => setLoading(false));
+    getBudgets().then(setBudgets).catch(() => {}).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);

@@ -17,7 +17,7 @@ function RootLayoutInner() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="local-auth" options={{ headerShown: false }} />
-        <Stack.Screen name="setup-pin" options={{ headerShown: false }} />
+        <Stack.Screen name="setup-passcode" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="signup" options={{ headerShown: false }} />

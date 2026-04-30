@@ -4,6 +4,7 @@ import { useAuth } from '@/context/auth-context';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { NativeModules, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const MAX_ATTEMPTS = 5;
@@ -12,31 +13,25 @@ const PIN_LENGTH = 6;
 const KEY_SIZE = 80;
 
 const KEYS = [
-  { num: '1', sub: '' },
-  { num: '2', sub: 'ABC' },
-  { num: '3', sub: 'DEF' },
-  { num: '4', sub: 'GHI' },
-  { num: '5', sub: 'JKL' },
-  { num: '6', sub: 'MNO' },
-  { num: '7', sub: 'PQRS' },
-  { num: '8', sub: 'TUV' },
-  { num: '9', sub: 'WXYZ' },
-  { num: '', sub: '' },
-  { num: '0', sub: '+' },
-  { num: '⌫', sub: '' },
+  { num: '1', sub: '' }, { num: '2', sub: 'ABC' }, { num: '3', sub: 'DEF' },
+  { num: '4', sub: 'GHI' }, { num: '5', sub: 'JKL' }, { num: '6', sub: 'MNO' },
+  { num: '7', sub: 'PQRS' }, { num: '8', sub: 'TUV' }, { num: '9', sub: 'WXYZ' },
+  { num: '', sub: '' }, { num: '0', sub: '+' }, { num: '⌫', sub: '' },
 ];
 
 export default function LocalAuthScreen() {
   const router = useRouter();
-  const { hasBiometrics, biometricTypes, biometricEnabled, passcodeEnabled, authenticateBiometric, verifyPin, unlockWithBiometric, refreshSession } = useAuth();
+  const { hasBiometrics, biometricTypes, biometricEnabled, passcodeEnabled, isFirstLaunch,
+          verifyPasscode, unlockWithBiometric, refreshSession } = useAuth();
 
   const isFaceID = biometricTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
   const biometricLabel = isFaceID ? 'Face ID' : 'Fingerprint';
 
-  const { pin: pinParam } = useLocalSearchParams<{ pin?: string }>();
+  const { passcode: passcodeParam } = useLocalSearchParams<{ passcode?: string }>();
+  const forcePasscode = passcodeParam === '1';
 
-  const [showPin, setShowPin] = useState(pinParam === '1');
-  const [pin, setPin] = useState('');
+  const [showPasscode, setShowPasscode] = useState(forcePasscode);
+  const [passcode, setPasscode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [attempts, setAttempts] = useState(0);
@@ -62,16 +57,28 @@ export default function LocalAuthScreen() {
     return () => clearInterval(lockoutTimer.current!);
   }, [lockoutLeft > 0]);
 
+  // Wait until auth state has loaded (isFirstLaunch transitions from null)
   useEffect(() => {
+    if (isFirstLaunch === null) return; // still loading
     if (prompted.current) return;
-    if (biometricEnabled && hasBiometrics) {
-      prompted.current = true;
-      handleBiometric();
-    } else if (!biometricEnabled && passcodeEnabled) {
-      prompted.current = true;
-      setShowPin(true);
+    prompted.current = true;
+
+    if (forcePasscode) {
+      setShowPasscode(true);
+      return;
     }
-  }, [biometricEnabled, hasBiometrics, passcodeEnabled]);
+
+    if (biometricEnabled && hasBiometrics) {
+      handleBiometric();
+    } else if (passcodeEnabled) {
+      SecureStore.getItemAsync('spendalt_refresh_token').then(token => {
+        if (token) setShowPasscode(true);
+        else router.replace('/login');
+      });
+    } else {
+      router.replace('/login');
+    }
+  }, [isFirstLaunch]);
 
   const handleBiometric = async () => {
     setError('');
@@ -86,29 +93,25 @@ export default function LocalAuthScreen() {
     setLoading(false);
   };
 
-  const handlePinKey = async (key: string) => {
+  const handlePasscodeKey = async (key: string) => {
     if (lockoutLeft > 0 || key === '') return;
-    if (key === '⌫') { setPin(p => p.slice(0, -1)); setError(''); return; }
-    if (pin.length >= PIN_LENGTH) return;
+    if (key === '⌫') { setPasscode(p => p.slice(0, -1)); setError(''); return; }
+    if (passcode.length >= PIN_LENGTH) return;
 
-    const next = pin + key;
-    setPin(next);
+    const next = passcode + key;
+    setPasscode(next);
 
     if (next.length === PIN_LENGTH) {
       setTimeout(async () => {
-        const ok = await verifyPin(next);
+        const ok = await verifyPasscode(next);
         if (ok) {
           setAttempts(0);
-          const refreshed = await refreshSession();
-          if (refreshed) {
-            router.replace('/(tabs)');
-          } else {
-            router.replace('/login');
-          }
+          refreshSession();
+          router.replace('/(tabs)');
         } else {
           const newAttempts = attempts + 1;
           setAttempts(newAttempts);
-          setPin('');
+          setPasscode('');
           if (newAttempts >= MAX_ATTEMPTS) {
             setAttempts(0);
             setLockoutLeft(LOCKOUT_SECONDS);
@@ -121,14 +124,14 @@ export default function LocalAuthScreen() {
     }
   };
 
-  if (showPin) {
+  if (showPasscode) {
     return (
       <View style={s.container}>
         <Text style={s.title}>Enter Passcode</Text>
 
         <View style={s.dots}>
           {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-            <View key={i} style={[s.dot, i < pin.length && s.dotFilled]} />
+            <View key={i} style={[s.dot, i < passcode.length && s.dotFilled]} />
           ))}
         </View>
 
@@ -146,7 +149,7 @@ export default function LocalAuthScreen() {
                 {!isEmpty && (
                   <TouchableOpacity
                     style={[s.key, isDelete && s.keyGhost]}
-                    onPress={() => handlePinKey(k.num)}
+                    onPress={() => handlePasscodeKey(k.num)}
                     disabled={lockoutLeft > 0}
                     activeOpacity={0.5}
                   >

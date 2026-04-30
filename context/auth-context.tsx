@@ -1,13 +1,13 @@
-import { clearToken, getToken, setUnauthorizedListener } from '@/services/api';
+import { clearToken, getToken, setUnauthorizedListener, setRefreshHandler } from '@/services/api';
 import { login as apiLogin, logout as apiLogout, refresh as apiRefresh, signup as apiSignup } from '@/services/auth-api';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 
 const FIRST_LAUNCH_KEY = 'spendalt_first_launch_done';
 const BIOMETRIC_ENABLED_KEY = 'spendalt_biometric_enabled';
 const PASSCODE_ENABLED_KEY = 'spendalt_passcode_enabled';
-const PIN_KEY = 'spendalt_pin';
+const PASSCODE_KEY = 'spendalt_passcode';
 const REFRESH_TOKEN_KEY = 'spendalt_refresh_token';
 
 export type AuthUser = { user_id: string; token: string };
@@ -26,16 +26,16 @@ type AuthContextType = {
   passcodeEnabled: boolean;
   enableBiometric: () => Promise<boolean>; // prompts OS verify, returns success
   disableBiometric: () => Promise<void>;
-  enablePasscode: () => Promise<void>;     // navigate to setup-pin after calling
+  enablePasscode: () => Promise<void>;     // navigate to setup-passcode after calling
   disablePasscode: () => Promise<void>;
-  savePin: (pin: string) => Promise<void>;
-  verifyPin: (pin: string) => Promise<boolean>;
+  savePasscode: (passcode: string) => Promise<void>;
+  verifyPasscode: (passcode: string) => Promise<boolean>;
 
   // Auth methods for unlock screen
   authenticateBiometric: () => Promise<boolean>;
   authenticatePasscode: () => Promise<boolean>;
   unlockWithBiometric: () => Promise<boolean>;
-  refreshSession: () => Promise<boolean>; // exchange refresh token for new access token, no biometric prompt
+  refreshSession: () => Promise<string | null>;
 
   // Session
   user: AuthUser | null;
@@ -55,26 +55,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [passcodeEnabled, setPasscodeEnabled] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
 
+  const refreshSessionRef = useRef<(() => Promise<string | null>) | undefined>(undefined);
+
   useEffect(() => {
-    setUnauthorizedListener(() => {
-      setUser(null);
-    });
+    setUnauthorizedListener(() => { setUser(null); });
+    setRefreshHandler(() => refreshSessionRef.current?.() ?? Promise.resolve(null));
   }, []);
 
   useEffect(() => {
     (async () => {
-      const [done, token, hasHW, bioEnabled, pcEnabled, pin] = await Promise.all([
+      const [done, token, hasHW, bioEnabled, pcEnabled, passcode] = await Promise.all([
         SecureStore.getItemAsync(FIRST_LAUNCH_KEY),
         getToken(),
         LocalAuthentication.hasHardwareAsync(),
         SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY),
         SecureStore.getItemAsync(PASSCODE_ENABLED_KEY),
-        SecureStore.getItemAsync(PIN_KEY),
+        SecureStore.getItemAsync(PASSCODE_KEY),
       ]);
 
-      const resolvedPcEnabled = pcEnabled === 'true' && !!pin;
+      const resolvedPcEnabled = pcEnabled === 'true' && !!passcode;
       const resolvedBioEnabled = bioEnabled === 'true';
-      if (pcEnabled === 'true' && !pin) await SecureStore.setItemAsync(PASSCODE_ENABLED_KEY, 'false');
+      if (pcEnabled === 'true' && !passcode) await SecureStore.setItemAsync(PASSCODE_ENABLED_KEY, 'false');
       if (!hasHW && bioEnabled === 'true') await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, 'false');
 
       if (token) {
@@ -125,42 +126,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const disablePasscode = async () => {
     await SecureStore.setItemAsync(PASSCODE_ENABLED_KEY, 'false');
-    await SecureStore.deleteItemAsync(PIN_KEY);
+    await SecureStore.deleteItemAsync(PASSCODE_KEY);
     setPasscodeEnabled(false);
   };
 
-  const savePin = async (pin: string) => {
-    await SecureStore.setItemAsync(PIN_KEY, pin);
+  const savePasscode = async (passcode: string) => {
+    await SecureStore.setItemAsync(PASSCODE_KEY, passcode);
     await SecureStore.setItemAsync(PASSCODE_ENABLED_KEY, 'true');
     setPasscodeEnabled(true);
   };
 
-  const verifyPin = async (pin: string): Promise<boolean> => {
-    const stored = await SecureStore.getItemAsync(PIN_KEY);
-    if (!stored || stored.length !== pin.length) return false;
+  const verifyPasscode = async (passcode: string): Promise<boolean> => {
+    const stored = await SecureStore.getItemAsync(PASSCODE_KEY);
+    if (!stored || stored.length !== passcode.length) return false;
     // Constant-time comparison to prevent timing attacks
     let diff = 0;
-    for (let i = 0; i < stored.length; i++) diff |= stored.charCodeAt(i) ^ pin.charCodeAt(i);
+    for (let i = 0; i < stored.length; i++) diff |= stored.charCodeAt(i) ^ passcode.charCodeAt(i);
     return diff === 0;
   };
 
   // ── Unlock methods ───────────────────────────────────────────────────────
 
-  const refreshSession = async (): Promise<boolean> => {
+  const refreshSession = async (): Promise<string | null> => {
     const storedRefresh = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-    if (!storedRefresh) return false;
+    if (!storedRefresh) return null;
     try {
       const data = await apiRefresh(storedRefresh);
       await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refresh_token);
       const userId = await SecureStore.getItemAsync('spendalt_user_id');
       if (userId) setUser({ user_id: userId, token: data.token });
-      return true;
+      return data.token;
     } catch {
-      await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-      setUser(null);
-      return false;
+      return null;
     }
   };
+
+  refreshSessionRef.current = refreshSession;
 
   const unlockWithBiometric = async (): Promise<boolean> => {
     const result = await LocalAuthentication.authenticateAsync({
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       disableDeviceFallback: true,
     });
     if (!result.success) return false;
-    return refreshSession();
+    return (await refreshSession()) !== null;
   };
 
   const authenticateBiometric = async (): Promise<boolean> => {
@@ -231,8 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       disableBiometric,
       enablePasscode,
       disablePasscode,
-      savePin,
-      verifyPin,
+      savePasscode,
+      verifyPasscode,
       authenticateBiometric,
       authenticatePasscode,
       unlockWithBiometric,

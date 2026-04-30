@@ -25,6 +25,7 @@ export default function InsightsScreen() {
   useEffect(() => {
     Promise.all([getInsights(), getCategoryBreakdown()])
       .then(([ins, bd]) => { setInsights(ins); setBreakdown(bd); })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

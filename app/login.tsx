@@ -51,7 +51,7 @@ export default function LoginScreen() {
   };
 
   const handlePasscode = () => {
-    router.push('/local-auth?pin=1');
+    router.push('/local-auth?passcode=1');
   };
 
   const showBiometric = hasBiometrics && biometricEnabled;
@@ -87,6 +87,7 @@ export default function LoginScreen() {
           secureTextEntry={!showPassword}
           value={password}
           onChangeText={setPassword}
+          autoComplete="off"
           leftIcon={<IconSymbol name="lock.fill" size={16} color={subTextColor} />}
           rightLabel={<TouchableOpacity onPress={() => router.push('/forgot-password')}><Text style={[s.forgot, { color: theme.green }]}>Forgot?</Text></TouchableOpacity>}
           rightIcon={
@@ -122,7 +123,7 @@ export default function LoginScreen() {
                 activeOpacity={0.7}
               >
                 <IconSymbol name="lock.fill" size={26} color={subTextColor} />
-                <Text style={[s.quickLabel, { color: subTextColor }]}>PIN</Text>
+                <Text style={[s.quickLabel, { color: subTextColor }]}>Passcode</Text>
               </TouchableOpacity>
             )}
           </View>

@@ -4,27 +4,31 @@ import { Brand } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { StyleSheet, Text, View } from 'react-native';
 
 export default function SplashScreen() {
   const router = useRouter();
-  const { isFirstLaunch, user, biometricEnabled, passcodeEnabled } = useAuth();
+  const { isFirstLaunch } = useAuth();
 
   useEffect(() => {
     if (isFirstLaunch === null) return; // still loading
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       if (isFirstLaunch) {
         router.replace('/onboarding');
-      } else if (user) {
-        router.replace('/local-auth'); // returning user with saved session → biometric unlock
       } else {
-        router.replace('/login'); // no session → regular login
+        const refreshToken = await SecureStore.getItemAsync('spendalt_refresh_token');
+        if (refreshToken) {
+          router.replace('/local-auth'); // has a session → unlock screen
+        } else {
+          router.replace('/login'); // no session → regular login
+        }
       }
     }, 1800);
 
     return () => clearTimeout(timer);
-  }, [isFirstLaunch]); // intentionally exclude user — only decide route once on load
+  }, [isFirstLaunch]);
 
   return (
     <View style={s.container}>
